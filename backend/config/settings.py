@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
     'households.apps.HouseholdsConfig',
     'inventory.apps.InventoryConfig',
+    'rest_framework'
 ]
 
 MIDDLEWARE = [
