@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Product, StorageLocation, PantryItem
+from .models import Product, Category, StorageLocation, PantryItem
 
 
 @admin.register(Product)
@@ -32,3 +32,8 @@ class PantryItemAdmin(admin.ModelAdmin):
     )
 
     search_fields = ('product__name',)
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name')
+    search_fields = ('name',)
