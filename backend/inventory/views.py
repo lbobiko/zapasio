@@ -1,10 +1,12 @@
-from rest_framework import status
+from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import Product
-from .serializers import ProductSerializer
+from .models import Product, Category
+from .serializers import ProductSerializer, CategorySerializer
 from django.shortcuts import get_object_or_404
+
+from django.db.models.deletion import ProtectedError
 
 
 @api_view(['GET', 'POST'])
@@ -39,8 +41,18 @@ def product_detail(request, pk):
         return Response(serializer.data)
 
     elif request.method == 'DELETE':
-        product.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        try:
+            product.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        except ProtectedError:
+            return Response(
+                {
+                    'detail': 'Nie można usunąć produktu, '
+                              'ponieważ jest wykorzystywany w zapasach.'
+                },
+                status=status.HTTP_409_CONFLICT
+            )
 
     elif request.method == 'PUT':
         serializer = ProductSerializer(
@@ -63,3 +75,22 @@ def product_detail(request, pk):
         serializer.errors,
         status=status.HTTP_400_BAD_REQUEST
     )
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+
+    def destroy(self, request, *args, **kwargs):
+        category = self.get_object()
+
+        try:
+            category.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        except ProtectedError:
+            return Response(
+                {'detail': 'Nie można usunąć kategorii, '
+                            'poniewaz jest przypisana do produktów'
+                 },
+                status = status.HTTP_409_CONFLICT
+            )
