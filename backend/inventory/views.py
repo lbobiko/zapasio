@@ -1,9 +1,11 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 
-from .models import Product, Category
-from .serializers import ProductSerializer, CategorySerializer
+from .models import Product, Category, PantryItem
+from .serializers import ProductSerializer, CategorySerializer, PantryItemSerializer
 from django.shortcuts import get_object_or_404
 
 from django.db.models.deletion import ProtectedError
@@ -94,3 +96,43 @@ class CategoryViewSet(viewsets.ModelViewSet):
                  },
                 status = status.HTTP_409_CONFLICT
             )
+
+class PantryItemViewSet(viewsets.ModelViewSet):
+    serializer_class = PantryItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return PantryItem.objects.filter(
+            household__memberships__user=self.request.user
+        ).select_related(
+            'product',
+            'household',
+            'storage_location'
+        ).distinct()
+
+    def perform_create(self, serializer):
+        household = serializer.validated_data['household']
+
+        if not household.memberships.filter(
+            user=self.request.user
+        ).exists():
+            raise PermissionDenied(
+                'Nie należysz do tego gospodarstwa.'
+            )
+
+        serializer.save()
+
+    def perform_update(self, serializer):
+        household = serializer.validated_data.get(
+            'household',
+            serializer.instance.household
+        )
+
+        if not household.memberships.filter(
+            user=self.request.user
+        ).exists():
+            raise PermissionDenied(
+                'Nie należysz do tego gospodarstwa.'
+            )
+
+        serializer.save()
