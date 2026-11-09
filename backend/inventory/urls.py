@@ -5,7 +5,8 @@ from .views import (
     product_list,
     product_detail,
     CategoryViewSet,
-    PantryItemViewSet
+    PantryItemViewSet,
+    StorageLocationViewSet
 )
 
 
@@ -15,6 +16,11 @@ router.register(
     'pantry-items',
     PantryItemViewSet,
     basename='pantry-item'
+)
+router.register(
+    'storage-locations',
+    StorageLocationViewSet,
+    basename='storage-location'
 )
 
 

@@ -72,3 +72,18 @@ class StorageLocationSerializer(serializers.ModelSerializer):
             'name'
         ]
         read_only_fields = ['id']
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            household = attrs.get('household')
+
+            if (
+                    household is not None
+                    and household.id != self.instance.household_id
+            ):
+                raise serializers.ValidationError({
+                    'household': 'Nie można zmienić gospodarstwa '
+                                 'istniejącego miejsca przechowywania.'
+                })
+
+        return attrs

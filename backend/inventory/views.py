@@ -4,8 +4,16 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 
-from .models import Product, Category, PantryItem
-from .serializers import ProductSerializer, CategorySerializer, PantryItemSerializer
+from .models import (
+    Product,
+    Category,
+    PantryItem,
+    StorageLocation)
+from .serializers import (
+    ProductSerializer,
+    CategorySerializer,
+    PantryItemSerializer,
+    StorageLocationSerializer)
 from django.shortcuts import get_object_or_404
 
 from django.db.models.deletion import ProtectedError
@@ -136,3 +144,61 @@ class PantryItemViewSet(viewsets.ModelViewSet):
             )
 
         serializer.save()
+
+class StorageLocationViewSet(viewsets.ModelViewSet):
+    serializer_class = StorageLocationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return StorageLocation.objects.filter(
+            household__memberships__user=self.request.user
+        ).select_related(
+            'household'
+        ).distinct()
+
+    def perform_create(self, serializer):
+        household = serializer.validated_data['household']
+
+        if not household.memberships.filter(
+            user=self.request.user
+        ).exists():
+            raise PermissionDenied(
+                'Nie należysz do tego gospodarstwa.'
+            )
+
+        serializer.save()
+
+    def perform_update(self, serializer):
+        household = serializer.validated_data.get(
+            'household',
+            serializer.instance.household
+        )
+
+        if not household.memberships.filter(
+            user=self.request.user
+        ).exists():
+            raise PermissionDenied(
+                'Nie należysz do tego gospodarstwa.'
+            )
+
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        storage_location = self.get_object()
+
+        try:
+            storage_location.delete()
+        except ProtectedError:
+            return Response(
+                {
+                    'detail': (
+                        'Nie można usunąć miejsca przechowywania, '
+                        'ponieważ znajdują się w nim zapasy.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+
+        return Response(
+            status=status.HTTP_204_NO_CONTENT
+        )
