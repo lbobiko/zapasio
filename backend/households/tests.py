@@ -797,3 +797,317 @@ class HouseholdAPITests(APITestCase):
             household.owner,
             self.user
         )
+
+    def test_non_member_cannot_update_household(self):
+        User = get_user_model()
+
+        other_user = User.objects.create_user(
+            username='otheruser',
+            password='testpassword123'
+        )
+
+        household = Household.objects.create(
+            name='Family Home',
+            owner=other_user
+        )
+
+        Membership.objects.create(
+            user=other_user,
+            household=household,
+            role='owner'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.patch(
+            f'/api/households/{household.id}/',
+            {'name': 'Changed Home'},
+            format='json'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND
+        )
+
+        household.refresh_from_db()
+
+        self.assertEqual(
+            household.name,
+            'Family Home'
+        )
+
+    def test_non_member_cannot_delete_household(self):
+        User = get_user_model()
+
+        other_user = User.objects.create_user(
+            username='otheruser',
+            password='testpassword123'
+        )
+
+        household = Household.objects.create(
+            name='Family Home',
+            owner=other_user
+        )
+
+        Membership.objects.create(
+            user=other_user,
+            household=household,
+            role='owner'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.delete(
+            f'/api/households/{household.id}/'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND
+        )
+
+        self.assertTrue(
+            Household.objects.filter(
+                id=household.id
+            ).exists()
+        )
+
+    def test_member_can_get_household_detail(self):
+        User = get_user_model()
+
+        owner = User.objects.create_user(
+            username='owner',
+            password='testpassword123'
+        )
+
+        household = Household.objects.create(
+            name='Family Home',
+            owner=owner
+        )
+
+        Membership.objects.create(
+            user=owner,
+            household=household,
+            role='owner'
+        )
+
+        Membership.objects.create(
+            user=self.user,
+            household=household,
+            role='member'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            f'/api/households/{household.id}/'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+        self.assertEqual(
+            response.data['name'],
+            'Family Home'
+        )
+
+    def test_non_member_cannot_get_household_detail(self):
+        User = get_user_model()
+
+        owner = User.objects.create_user(
+            username='owner',
+            password='testpassword123'
+        )
+
+        household = Household.objects.create(
+            name='Family Home',
+            owner=owner
+        )
+
+        Membership.objects.create(
+            user=owner,
+            household=household,
+            role='owner'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            f'/api/households/{household.id}/'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND
+        )
+
+    def test_cannot_add_member_without_username(self):
+        household = Household.objects.create(
+            name='Family Home',
+            owner=self.user
+        )
+
+        Membership.objects.create(
+            user=self.user,
+            household=household,
+            role='owner'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            f'/api/households/{household.id}/members/',
+            {},
+            format='json'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST
+        )
+
+        self.assertEqual(
+            Membership.objects.filter(
+                household=household
+            ).count(),
+            1
+        )
+
+    def test_cannot_assign_owner_role_when_adding_member(self):
+        User = get_user_model()
+
+        new_user = User.objects.create_user(
+            username='newmember',
+            password='testpassword123'
+        )
+
+        household = Household.objects.create(
+            name='Family Home',
+            owner=self.user
+        )
+
+        Membership.objects.create(
+            user=self.user,
+            household=household,
+            role='owner'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            f'/api/households/{household.id}/members/',
+            {
+                'username': 'newmember',
+                'role': 'owner'
+            },
+            format='json'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED
+        )
+
+        membership = Membership.objects.get(
+            household=household,
+            user=new_user
+        )
+
+        self.assertEqual(
+            membership.role,
+            'member'
+        )
+
+    def test_non_member_cannot_remove_household_member(self):
+        User = get_user_model()
+
+        owner = User.objects.create_user(
+            username='owner',
+            password='testpassword123'
+        )
+
+        member = User.objects.create_user(
+            username='member',
+            password='testpassword123'
+        )
+
+        household = Household.objects.create(
+            name='Family Home',
+            owner=owner
+        )
+
+        Membership.objects.create(
+            user=owner,
+            household=household,
+            role='owner'
+        )
+
+        membership = Membership.objects.create(
+            user=member,
+            household=household,
+            role='member'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.delete(
+            f'/api/households/{household.id}/members/{membership.id}/'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND
+        )
+
+        self.assertTrue(
+            Membership.objects.filter(
+                id=membership.id
+            ).exists()
+        )
+
+    def test_non_member_cannot_add_household_member(self):
+        User = get_user_model()
+
+        owner = User.objects.create_user(
+            username='owner',
+            password='testpassword123'
+        )
+
+        new_user = User.objects.create_user(
+            username='newmember',
+            password='testpassword123'
+        )
+
+        household = Household.objects.create(
+            name='Family Home',
+            owner=owner
+        )
+
+        Membership.objects.create(
+            user=owner,
+            household=household,
+            role='owner'
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            f'/api/households/{household.id}/members/',
+            {'username': 'newmember'},
+            format='json'
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND
+        )
+
+        self.assertFalse(
+            Membership.objects.filter(
+                household=household,
+                user=new_user
+            ).exists()
+        )
