@@ -30,13 +30,15 @@ class PantryItemSerializer(serializers.ModelSerializer):
             'product',
             'quantity',
             'expiration_date',
+            'expiration_status',
             'storage_location',
             'added_at'
         ]
 
         read_only_fields = [
             'id',
-            'added_at'
+            'added_at',
+            'expiration_status',
         ]
     def validate(self, attrs):
         household = attrs.get(

@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 class Category(models.Model):
     name = models.CharField(
@@ -118,6 +119,26 @@ class PantryItem(models.Model):
 
     def __str__(self):
         return f"{self.product.name} - {self.quantity} szt."
+
+    @property
+    def expiration_status(self):
+        if self.expiration_date is None:
+            return 'no_date'
+
+        today = timezone.localdate()
+
+        if self.expiration_date < today:
+            return 'expired'
+
+        if self.expiration_date == today:
+            return 'expires_today'
+
+        days_left = (self.expiration_date - today).days
+
+        if days_left <= 3:
+            return 'expiring_soon'
+
+        return 'fresh'
 
 
 

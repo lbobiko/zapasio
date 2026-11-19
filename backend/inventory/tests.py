@@ -2,9 +2,12 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 
 from .models import Product, StorageLocation, PantryItem
+from .serializers import PantryItemSerializer
 from households.models import Household, Membership
 
 from django.contrib.auth import get_user_model
+from datetime import timedelta
+from django.utils import timezone
 
 
 class ProductAPITests(APITestCase):
@@ -505,6 +508,23 @@ class PantryItemPermissionTests(APITestCase):
             1
         )
 
+    # testowanie daty waznosci
+    def test_expiration_status_in_api_response(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() + timedelta(days=2)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get('/api/pantry-items/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expiring_soon'
+        )
+
 # ------------- testy dla miejsc przechowywania -----------------
 class StorageLocationAPITests(APITestCase):
 
@@ -793,4 +813,53 @@ class StorageLocationAPITests(APITestCase):
             StorageLocation.objects.filter(
                 id=self.location.id
             ).exists()
+        )
+
+class PantryItemExpirationTests(APITestCase):
+
+    def test_expired_product(self):
+        item = PantryItem(
+            expiration_date=timezone.localdate() - timedelta(days=1)
+        )
+
+        self.assertEqual(item.expiration_status, 'expired')
+
+    def test_expiring_soon_product(self):
+        item = PantryItem(
+            expiration_date=timezone.localdate() + timedelta(days=3)
+        )
+
+        self.assertEqual(item.expiration_status, 'expiring_soon')
+
+    def test_fresh_product(self):
+        item = PantryItem(
+            expiration_date=timezone.localdate() + timedelta(days=4)
+        )
+
+        self.assertEqual(item.expiration_status, 'fresh')
+
+    def test_product_expires_today(self):
+        item = PantryItem(
+            expiration_date=timezone.localdate()
+        )
+
+        self.assertEqual(item.expiration_status, 'expires_today')
+
+    def test_product_without_expiration_date(self):
+        item = PantryItem(
+            expiration_date=None
+        )
+
+        self.assertEqual(item.expiration_status, 'no_date')
+
+    def test_expiration_status_in_serializer(self):
+        item = PantryItem(
+            expiration_date=timezone.localdate() + timedelta(days=2)
+        )
+
+        serializer = PantryItemSerializer(item)
+
+        self.assertEqual(
+            serializer.data['expiration_status'],
+            'expiring_soon'
         )
