@@ -524,6 +524,129 @@ class PantryItemPermissionTests(APITestCase):
             response.data[0]['expiration_status'],
             'expiring_soon'
         )
+    # sprawdzenie filtru fresh
+    def test_filter_fresh_pantry_items(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() + timedelta(days=4)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/?expiration_status=fresh'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'fresh'
+        )
+
+    def test_filter_fresh_excludes_expired_items(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() - timedelta(days=1)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/?expiration_status=fresh'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+    def test_filter_expired_pantry_items(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() - timedelta(days=1)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/?expiration_status=expired'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expired'
+        )
+
+    def test_filter_expiring_soon_pantry_items(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() + timedelta(days=3)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/?expiration_status=expiring_soon'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expiring_soon'
+        )
+
+    def test_filter_expires_today_pantry_items(self):
+        self.pantry_item.expiration_date = timezone.localdate()
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/?expiration_status=expires_today'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expires_today'
+        )
+
+    def test_filter_no_date_pantry_items(self):
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/?expiration_status=no_date'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'no_date'
+        )
+
+    def test_invalid_expiration_status_returns_400(self):
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/?expiration_status=banana'
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('expiration_status', response.data)
+
+    def test_no_expiration_filter_returns_all_items(self):
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get('/api/pantry-items/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+
+
 
 # ------------- testy dla miejsc przechowywania -----------------
 class StorageLocationAPITests(APITestCase):

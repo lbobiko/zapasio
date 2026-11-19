@@ -2,7 +2,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .models import (
     Product,
@@ -15,6 +15,8 @@ from .serializers import (
     PantryItemSerializer,
     StorageLocationSerializer)
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from datetime import timedelta
 
 from django.db.models.deletion import ProtectedError
 
@@ -110,13 +112,65 @@ class PantryItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return PantryItem.objects.filter(
+        queryset = PantryItem.objects.filter(
             household__memberships__user=self.request.user
         ).select_related(
             'product',
             'household',
             'storage_location'
         ).distinct()
+
+        expiration_status = self.request.query_params.get(
+            'expiration_status'
+        )
+
+        valid_statuses = {
+            'expired',
+            'expires_today',
+            'expiring_soon',
+            'fresh',
+            'no_date',
+        }
+
+        if expiration_status is not None and expiration_status not in valid_statuses:
+            raise ValidationError({
+                'expiration_status': 'Nieprawidłowy status ważności.'
+            })
+
+        if expiration_status == 'expired':
+            today = timezone.localdate()
+            queryset = queryset.filter(
+                expiration_date__lt=today
+            )
+
+        elif expiration_status == 'fresh':
+            today = timezone.localdate()
+            queryset = queryset.filter(
+                expiration_date__gt=today + timedelta(days=3)
+            )
+
+        elif expiration_status == 'expiring_soon':
+            today = timezone.localdate()
+
+            queryset = queryset.filter(
+                expiration_date__gt=today,
+                expiration_date__lte=today + timedelta(days=3)
+            )
+
+        elif expiration_status == 'expires_today':
+            today = timezone.localdate()
+
+            queryset = queryset.filter(
+                expiration_date=today
+            )
+
+        elif expiration_status == 'no_date':
+            queryset = queryset.filter(
+                expiration_date__isnull=True
+            )
+
+        return queryset
+
 
     def perform_create(self, serializer):
         household = serializer.validated_data['household']
