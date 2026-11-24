@@ -1,5 +1,5 @@
 from rest_framework import status, viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -198,6 +198,19 @@ class PantryItemViewSet(viewsets.ModelViewSet):
             )
 
         serializer.save()
+
+    @action(detail=False, methods=['get'])
+    def expiring(self, request):
+        today = timezone.localdate()
+
+        queryset = self.get_queryset().filter(
+            expiration_date__lte=today + timedelta(days=3)
+        ).order_by('expiration_date')
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response(serializer.data)
+
 
 class StorageLocationViewSet(viewsets.ModelViewSet):
     serializer_class = StorageLocationSerializer

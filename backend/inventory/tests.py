@@ -646,6 +646,138 @@ class PantryItemPermissionTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
 
+    def test_expiring_endpoint_includes_expired_items(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() - timedelta(days=1)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expired'
+        )
+
+    def test_expiring_endpoint_includes_items_expiring_today(self):
+        self.pantry_item.expiration_date = timezone.localdate()
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expires_today'
+        )
+
+    def test_expiring_endpoint_includes_items_expiring_in_three_days(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() + timedelta(days=3)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expiring_soon'
+        )
+
+    def test_expiring_endpoint_excludes_fresh_items(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() + timedelta(days=4)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+    def test_expiring_endpoint_excludes_items_without_date(self):
+        self.pantry_item.expiration_date = None
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+    # test sortowania wynikow
+    def test_expiring_endpoint_orders_items_by_expiration_date(self):
+        today = timezone.localdate()
+
+        self.pantry_item.expiration_date = today + timedelta(days=2)
+        self.pantry_item.save()
+
+        expired_item = PantryItem.objects.create(
+            household=self.household,
+            product=self.product,
+            storage_location=self.storage_location,
+            quantity=1,
+            expiration_date=today - timedelta(days=1)
+        )
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data[0]['id'], expired_item.id)
+        self.assertEqual(response.data[1]['id'], self.pantry_item.id)
+
+    # izolacja zapasow innych gospodarstw
+    def test_expiring_endpoint_excludes_other_households_items(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() - timedelta(days=1)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user2)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+    def test_expiring_endpoint_requires_authentication(self):
+        response = self.client.get(
+            '/api/pantry-items/expiring/'
+        )
+
+        self.assertEqual(response.status_code, 403)
+
 
 
 # ------------- testy dla miejsc przechowywania -----------------
