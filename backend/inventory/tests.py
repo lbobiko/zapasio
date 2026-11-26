@@ -777,6 +777,118 @@ class PantryItemPermissionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+# ---- test dla statystyk zapasow
+    def test_statistics_endpoint_returns_correct_counts(self):
+        today = timezone.localdate()
+
+        expiration_dates = [
+            today - timedelta(days=1),
+            today,
+            today + timedelta(days=3),
+            today + timedelta(days=4),
+            None
+        ]
+
+        for expiration_date in expiration_dates:
+            PantryItem.objects.create(
+                household=self.household,
+                product=self.product,
+                storage_location=self.storage_location,
+                quantity=1,
+                expiration_date=expiration_date
+            )
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/statistics/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(response.data['total'], 6)
+        self.assertEqual(response.data['expired'], 1)
+        self.assertEqual(response.data['expires_today'], 1)
+        self.assertEqual(response.data['expiring_soon'], 1)
+        self.assertEqual(response.data['fresh'], 1)
+        self.assertEqual(response.data['no_date'], 2)
+
+    def test_statistics_endpoint_returns_zero_for_empty_pantry(self):
+        self.pantry_item.delete()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/statistics/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {
+            'total': 0,
+            'expired': 0,
+            'no_date': 0,
+            'expires_today': 0,
+            'expiring_soon': 0,
+            'fresh': 0
+        })
+
+    def test_statistics_endpoint_excludes_other_households(self):
+        self.pantry_item.expiration_date = (
+                timezone.localdate() - timedelta(days=1)
+        )
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user2)
+
+        response = self.client.get(
+            '/api/pantry-items/statistics/'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {
+            'total': 0,
+            'expired': 0,
+            'no_date': 0,
+            'expires_today': 0,
+            'expiring_soon': 0,
+            'fresh': 0
+        })
+
+    def test_statistics_endpoint_requires_authentication(self):
+        response = self.client.get(
+            '/api/pantry-items/statistics/'
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_statistics_endpoint_ignores_expiration_filter(self):
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/statistics/?expiration_status=expired'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['no_date'], 1)
+        self.assertEqual(response.data['expired'], 0)
+
+    def test_expiring_endpoint_ignores_expiration_filter(self):
+        self.pantry_item.expiration_date = timezone.localdate()
+        self.pantry_item.save()
+
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.get(
+            '/api/pantry-items/expiring/?expiration_status=fresh'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['expiration_status'],
+            'expires_today'
+        )
 
 
 

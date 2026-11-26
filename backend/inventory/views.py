@@ -19,6 +19,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from django.db.models.deletion import ProtectedError
+from django.db.models import Count, Q
 
 
 @api_view(['GET', 'POST'])
@@ -120,6 +121,9 @@ class PantryItemViewSet(viewsets.ModelViewSet):
             'storage_location'
         ).distinct()
 
+        if self.action != 'list':
+            return queryset
+
         expiration_status = self.request.query_params.get(
             'expiration_status'
         )
@@ -210,6 +214,39 @@ class PantryItemViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
 
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        today = timezone.localdate()
+
+        queryset = self.get_queryset()
+
+        statistics = queryset.aggregate(
+            total = Count('id'),
+            expired = Count(
+                'id',
+                filter = Q(expiration_date__lt=today)
+            ),
+            no_date = Count(
+                'id',
+                filter = Q(expiration_date__isnull=True)
+            ),
+            expires_today = Count(
+                'id',
+                filter = Q(expiration_date = today)
+            ),
+            expiring_soon = Count(
+                'id',
+                filter = Q(expiration_date__gt = today) &
+                         Q(expiration_date__lte = today + timedelta(days=3))
+            ),
+            fresh = Count(
+                'id',
+                filter = Q(expiration_date__gt = today + timedelta(days=3))
+            )
+        )
+
+        return Response(statistics)
 
 
 class StorageLocationViewSet(viewsets.ModelViewSet):
